@@ -1,0 +1,14 @@
+{
+  "name": "@lumenlabs/lumen-brain",
+  "version": "1.0.1",
+  "description": "Operate with Lumen Brain API in Python straight forwardly",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "Lumen Labs",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
