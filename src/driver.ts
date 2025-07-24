@@ -36,12 +36,12 @@ export class LumenBrainDriver {
   async saveMessage(
     memoryUuid: string,
     content: string,
-    role?: "user" | "assistant",
+    role: "user" | "assistant",
     conversationId?: string,
     metadata?: Record<string, any>
   ): Promise<MemoryUpdateResponse> {
     let taskId: string | null = null;
-
+    console.log(MemoryEndpoints.UPDATE);
     try {
       const response = await fetch(MemoryEndpoints.UPDATE, {
         method: "POST",
@@ -50,7 +50,7 @@ export class LumenBrainDriver {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          memory_id: memoryUuid,
+          memory_uuid: memoryUuid,
           type: "message",
           content,
           role,
@@ -58,6 +58,10 @@ export class LumenBrainDriver {
           metadata,
         }),
       });
+
+      if (response.status !== 200) {
+        throw new Error("Failed to save message");
+      }
 
       const result = await response.json();
       taskId = result.task_id;
@@ -84,7 +88,7 @@ export class LumenBrainDriver {
         console.error("[LUMEN BRAIN] Error polling task", e);
         throw e;
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     return result;
@@ -114,13 +118,17 @@ export class LumenBrainDriver {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          memory_id: memoryUuid,
+          memory_uuid: memoryUuid,
           type: resourceType,
           content,
           resource_type: resourceType,
           metadata,
         }),
       });
+
+      if (response.status !== 200) {
+        throw new Error("Failed to inject knowledge");
+      }
 
       const result = await response.json();
       taskId = result.task_id;
@@ -150,7 +158,7 @@ export class LumenBrainDriver {
         );
         throw e;
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     return result;
@@ -176,7 +184,7 @@ export class LumenBrainDriver {
       },
       body: JSON.stringify({
         text,
-        memory_id: memoryUuid,
+        memory_uuid: memoryUuid,
         conversation_id: conversationId,
       }),
     });

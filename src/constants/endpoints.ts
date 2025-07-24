@@ -7,7 +7,7 @@
 // -----
 
 export const API_VERSION = "v1";
-export const BASE_URL = `https://brainapi.lumen-labs.ai/${API_VERSION}`;
+export const BASE_URL = `https://brainapi.lumen-labs.ai/api/${API_VERSION}`;
 
 export type MemoryContentType =
   | "file"
@@ -38,8 +38,10 @@ export interface MemoryQueryResponse {
 
 export interface MemoryUpdateResponse {
   task_id: string;
-  memory_id: string;
-  conversation_id: string;
+  result: {
+    memory_id: string;
+    conversation_id: string;
+  };
 }
 
 export interface ApiHeaders {

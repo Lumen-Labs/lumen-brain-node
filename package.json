@@ -1,8 +1,9 @@
 {
   "name": "@lumenlabs/lumen-brain",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Operate with Lumen Brain API in Python straight forwardly",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc"
   },
