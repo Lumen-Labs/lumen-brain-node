@@ -41,7 +41,10 @@ export class LumenBrainDriver {
     metadata?: Record<string, any>
   ): Promise<MemoryUpdateResponse> {
     let taskId: string | null = null;
-    console.log(MemoryEndpoints.UPDATE);
+
+    let _conversationId = conversationId;
+    let _memoryId = null;
+
     try {
       const response = await fetch(MemoryEndpoints.UPDATE, {
         method: "POST",
@@ -59,39 +62,29 @@ export class LumenBrainDriver {
         }),
       });
 
-      if (response.status !== 200) {
-        throw new Error("Failed to save message");
-      }
-
       const result = await response.json();
       taskId = result.task_id;
+      _memoryId = result.memory_id;
+      _conversationId = result.conversation_id;
     } catch (e) {
       console.error("[LUMEN BRAIN] Error saving message", e);
       throw e;
     }
 
-    let result = null;
-
-    while (!result) {
-      try {
-        const resultRes = await fetch(`${MemoryEndpoints.TASKS}/${taskId}`, {
-          headers: {
-            [API_KEY_HEADER]: this.apiKey,
-          },
-        });
-
-        if (resultRes.status === 200) {
-          result = await resultRes.json();
-          break;
-        }
-      } catch (e) {
-        console.error("[LUMEN BRAIN] Error polling task", e);
-        throw e;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!_conversationId || !_memoryId) {
+      return {
+        error: "Failed to save message",
+        task_id: taskId!,
+      };
     }
 
-    return result;
+    return {
+      result: {
+        memory_id: _memoryId!,
+        conversation_id: _conversationId!,
+      },
+      task_id: taskId!,
+    };
   }
 
   /**
@@ -110,6 +103,8 @@ export class LumenBrainDriver {
   ): Promise<MemoryUpdateResponse> {
     let taskId: string | null = null;
 
+    let _memoryId = null;
+
     try {
       const response = await fetch(MemoryEndpoints.UPDATE, {
         method: "POST",
@@ -126,42 +121,27 @@ export class LumenBrainDriver {
         }),
       });
 
-      if (response.status !== 200) {
-        throw new Error("Failed to inject knowledge");
-      }
-
       const result = await response.json();
       taskId = result.task_id;
+      _memoryId = result.memory_id;
     } catch (e) {
       console.error("[LUMEN BRAIN] Error injecting knowledge", e);
       throw e;
     }
 
-    let result = null;
-
-    while (!result) {
-      try {
-        const resultRes = await fetch(`${MemoryEndpoints.TASKS}/${taskId}`, {
-          headers: {
-            [API_KEY_HEADER]: this.apiKey,
-          },
-        });
-
-        if (resultRes.status === 200) {
-          result = await resultRes.json();
-          break;
-        }
-      } catch (e) {
-        console.error(
-          "[LUMEN BRAIN] Error polling knowledge injection task",
-          e
-        );
-        throw e;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!_memoryId) {
+      return {
+        error: "Failed to inject knowledge",
+        task_id: taskId!,
+      };
     }
 
-    return result;
+    return {
+      result: {
+        memory_id: memoryUuid,
+      },
+      task_id: taskId!,
+    };
   }
 
   /**

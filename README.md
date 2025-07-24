@@ -107,9 +107,12 @@ interface MemoryQueryResponse {
 }
 
 interface MemoryUpdateResponse {
-  task_id: string;
-  memory_id: string;
-  conversation_id: string;
+  error?: string; // If the operation failed, this will contain the error message
+  task_id: string; // The task ID of the operation
+  result?: {
+    memory_id: string;
+    conversation_id?: string;
+  };
 }
 ```
 

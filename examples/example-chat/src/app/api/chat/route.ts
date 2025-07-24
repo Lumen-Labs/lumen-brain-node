@@ -41,20 +41,25 @@ export async function POST(req: Request) {
       conversationId
     );
 
-    const {
-      result: { memory_id, conversation_id },
-      task_id,
-    } = brainResponse;
-    console.log(memory_id, conversation_id, task_id);
+    const { result, task_id, error } = brainResponse;
+    console.log(result, task_id, error);
+
+    if (error) {
+      console.error(error);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     // ============================================================
 
     // Retrieve the relevant context from the brain ============================
     const queryResponse = await brain.queryMemory(
       message,
-      memory_id,
-      conversation_id
+      result!.memory_id,
+      result!.conversation_id!
     );
-    console.log(JSON.stringify(queryResponse, null, 2));
+
     // Add it to the user message, it will contain:
     // - relevant memories
     // - past conversation messages
@@ -85,7 +90,7 @@ export async function POST(req: Request) {
               if (content) {
                 const data = `data: ${JSON.stringify({
                   content,
-                  conversationId: conversation_id,
+                  conversationId: result!.conversation_id!,
                 })}\n\n`;
                 controller.enqueue(encoder.encode(data));
               }
