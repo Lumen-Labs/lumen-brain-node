@@ -12,6 +12,7 @@ import {
   MemoryEndpoints,
   MemoryQueryResponse,
   MemoryUpdateResponse,
+  QueryEntitiesResponse,
 } from "./constants/endpoints";
 
 export class LumenBrainDriver {
@@ -170,5 +171,40 @@ export class LumenBrainDriver {
     });
 
     return response.json();
+  }
+
+  async fetchInfo(
+    memoryUuid: string,
+    entities: string[],
+    info: string,
+    depth: number
+  ): Promise<QueryEntitiesResponse> {
+    try {
+      const params = new URLSearchParams({
+        memory_uuid: memoryUuid,
+        entities: entities.join(","),
+        info,
+        depth: depth.toString(),
+      });
+
+      const response = await fetch(
+        `${MemoryEndpoints.QUERY_ENTITIES}?${params.toString()}`,
+        {
+          method: "GET",
+          headers: {
+            [API_KEY_HEADER]: this.apiKey,
+          },
+        }
+      );
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      return result;
+    } catch (e) {
+      console.error("[LUMEN BRAIN] Error fetching info", e);
+      throw e;
+    }
   }
 }

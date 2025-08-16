@@ -1,6 +1,6 @@
 {
   "name": "@lumenlabs/lumen-brain",
-  "version": "1.0.4",
+  "version": "1.2.0",
   "description": "Operate with Lumen Brain API in Python straight forwardly",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -7,7 +7,8 @@
 // -----
 
 export const API_VERSION = "v1";
-export const BASE_URL = `https://brain.lumen-labs.ai/api/${API_VERSION}`;
+// export const BASE_URL = `http://localhost:8000/api/${API_VERSION}`;
+export const BASE_URL = `https://api.brain.lumen-labs.ai/api/${API_VERSION}`;
 
 export type MemoryContentType =
   | "file"
@@ -25,6 +26,7 @@ export const API_KEY_HEADER = "X-LumenBrain-ApiKey";
 export enum MemoryEndpoints {
   UPDATE = `${BASE_URL}/memory/update`,
   QUERY = `${BASE_URL}/memory/query`,
+  QUERY_ENTITIES = `${BASE_URL}/memory/query/entities`,
   TASKS = `${BASE_URL}/tasks`,
 }
 
@@ -47,4 +49,30 @@ export interface MemoryUpdateResponse {
 
 export interface ApiHeaders {
   [API_KEY_HEADER]: string;
+}
+
+export interface Node {
+  natural_lang: string;
+  id: string;
+  parent_id: string | null;
+  name: string;
+  relationships: Relationship[];
+  source_id: string;
+  phrase: string;
+}
+
+export interface Relationship {
+  name: string;
+  phrase: string;
+  direction: string;
+  natural_lang: string;
+  related_node: Node;
+  similarity: number;
+  source_id: string;
+}
+
+export interface QueryEntitiesResponse {
+  nodes: Node[];
+  most_relevant_relation: Relationship | null;
+  most_relevant_confidence: number | null;
 }

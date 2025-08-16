@@ -86,6 +86,14 @@ class LumenBrainDriver {
     memoryUuid: string,
     conversationId: string
   ): Promise<MemoryQueryResponse>;
+
+  // Fetch information about entities
+  async fetchInfo(
+    memoryUuid: string,
+    entities: string[],
+    info: string,
+    depth: number
+  ): Promise<QueryEntitiesResponse>;
 }
 ```
 
@@ -115,6 +123,12 @@ interface MemoryUpdateResponse {
   };
 }
 ```
+
+interface QueryEntitiesResponse {
+nodes: Node[];
+most_relevant_relation: Relationship | null;
+most_relevant_confidence: number | null; // The confidence of the most relevant relation (0-1)
+}
 
 ## Error Handling
 
