@@ -92,7 +92,7 @@ class LumenBrainDriver {
     memoryUuid: string,
     entities: string[],
     info: string,
-    depth: number
+    depth?: number // default is 2
   ): Promise<QueryEntitiesResponse>;
 }
 ```

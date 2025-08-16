@@ -177,14 +177,14 @@ export class LumenBrainDriver {
     memoryUuid: string,
     entities: string[],
     info: string,
-    depth: number
+    depth?: number
   ): Promise<QueryEntitiesResponse> {
     try {
       const params = new URLSearchParams({
         memory_uuid: memoryUuid,
         entities: entities.join(","),
         info,
-        depth: depth.toString(),
+        depth: depth?.toString() || "2",
       });
 
       const response = await fetch(
