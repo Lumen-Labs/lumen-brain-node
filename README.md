@@ -157,3 +157,15 @@ MIT
 ## Author
 
 Christian Nonis <alch.infoemail@gmail.com>
+
+### Cancel a BrainAPI ingestion
+
+Configure the engine connection for ingestion task operations.
+
+```ts
+const driver = new LumenBrainDriver(apiKey, { baseUrl: engineUrl, brainId, brainPat });
+await driver.cancelIngestion(taskId, "keep_saved");
+const state = await driver.getIngestionTask(taskId);
+```
+
+Use `rollback` to discard staged output. Poll until the task is terminal. HTTP 409 means the selected mode is unavailable or publication already started.

@@ -15,14 +15,71 @@ import {
   QueryEntitiesResponse,
 } from "./constants/endpoints";
 
+export type IngestionCancellationMode = "keep_saved" | "rollback";
+
+export interface IngestionCancellation {
+  task_id: string;
+  mode: IngestionCancellationMode;
+  status: "cancelling" | "cancelled" | "rollback_failed";
+}
+
+export interface BrainIngestionConnection {
+  baseUrl: string;
+  brainId: string;
+  brainPat: string;
+}
+
 export class LumenBrainDriver {
   private readonly apiKey: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, private readonly ingestion?: BrainIngestionConnection) {
     if (!apiKey) {
       throw new Error("Lumen Brain API key is required");
     }
     this.apiKey = apiKey;
+  }
+
+  async cancelIngestion(
+    taskId: string,
+    mode: IngestionCancellationMode
+  ): Promise<IngestionCancellation> {
+    const { url, headers } = this.ingestionTaskRequest(taskId);
+    const response = await fetch(`${url}/cancel`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) {
+      throw new Error(`Ingestion cancellation failed (HTTP ${response.status})`);
+    }
+    return response.json();
+  }
+
+  async getIngestionTask(taskId: string): Promise<Record<string, unknown>> {
+    const { url, headers } = this.ingestionTaskRequest(taskId);
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Ingestion task lookup failed (HTTP ${response.status})`);
+    }
+    return response.json();
+  }
+
+  private ingestionTaskRequest(taskId: string): { url: string; headers: Record<string, string> } {
+    const encoded = encodeURIComponent(taskId);
+    if (this.ingestion) {
+      const { baseUrl, brainId, brainPat } = this.ingestion;
+      return {
+        url: `${baseUrl.replace(/\/$/, "")}/tasks/${encoded}`,
+        headers: { BrainPAT: brainPat, "X-Brain-ID": brainId },
+      };
+    }
+    return {
+      url: `${MemoryEndpoints.TASKS}/${encoded}`,
+      headers: { [API_KEY_HEADER]: this.apiKey },
+    };
   }
 
   /**

@@ -9,3 +9,4 @@
 import { LumenBrainDriver } from "./driver";
 
 export { LumenBrainDriver };
+export type { BrainIngestionConnection, IngestionCancellation, IngestionCancellationMode } from "./driver";
