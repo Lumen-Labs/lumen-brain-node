@@ -15,6 +15,14 @@ import {
   QueryEntitiesResponse,
 } from "./constants/endpoints";
 
+export type IngestionCancellationMode = "keep_saved" | "rollback";
+
+export interface IngestionCancellation {
+  task_id: string;
+  mode: IngestionCancellationMode;
+  status: "cancelling" | "cancelled" | "rollback_failed";
+}
+
 export class LumenBrainDriver {
   private readonly apiKey: string;
 
@@ -23,6 +31,25 @@ export class LumenBrainDriver {
       throw new Error("Lumen Brain API key is required");
     }
     this.apiKey = apiKey;
+  }
+
+  async cancelIngestion(
+    taskId: string,
+    mode: IngestionCancellationMode
+  ): Promise<IngestionCancellation> {
+    const url = `${MemoryEndpoints.TASKS}/${encodeURIComponent(taskId)}/cancel`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        [API_KEY_HEADER]: this.apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) {
+      throw new Error(`Ingestion cancellation failed (HTTP ${response.status})`);
+    }
+    return response.json();
   }
 
   /**
