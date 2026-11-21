@@ -8,7 +8,7 @@
 
 export const API_VERSION = "v1";
 // export const BASE_URL = `http://localhost:8000/api/${API_VERSION}`;
-export const BASE_URL = `https://api.brain.lumen-labs.ai/api/${API_VERSION}`;
+export const BASE_URL = `https://api.brainapi.lumen-labs.ai/api/${API_VERSION}`;
 
 export type MemoryContentType =
   | "file"
