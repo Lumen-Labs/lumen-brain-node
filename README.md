@@ -1,159 +1,211 @@
-# Lumen Brain TypeScript SDK
+# @lumenlabs/lumen-brain
 
-A TypeScript SDK for interacting with the Lumen Brain API, providing seamless integration with Lumen Brain's memory and knowledge management capabilities.
+TypeScript SDK for [BrainAPI](https://brainapi.lumen-labs.ai) v2.
 
-## Features
-
-- 🔑 **API Key Authentication**: Secure access to Lumen Brain services
-- 💾 **Memory Management**: Save and query memory entries
-- 🧠 **Knowledge Injection**: Add various types of content to your knowledge base
-- 🔄 **Async Task Handling**: Built-in polling for long-running operations
-- 📝 **Type Safety**: Full TypeScript support with comprehensive type definitions
+The client talks to a regional BrainAPI host with a personal access token (BrainPAT) and an `X-Brain-ID` workspace. It covers ingest, retrieve/search/context (including `as_of` / validity), chat-style context queries, fact verification, conflicts, and graph entity/relationship endpoints.
 
 ## Installation
 
 ```bash
-npm install lumen-brain
-
-# or with yarn
-yarn add lumen-brain
-
-# or with pnpm
-pnpm add lumen-brain
+npm install @lumenlabs/lumen-brain
 ```
 
-## Quick Start
+Node.js 18 or later is required (`fetch` is used by default).
 
-```typescript
-import { LumenBrainDriver } from "lumen-brain";
+## Quick start
 
-// Initialize the driver with your API key
-const brain = new LumenBrainDriver("your-api-key");
+```ts
+import { BrainAPI } from "@lumenlabs/lumen-brain";
 
-// Save a message to memory
-const saveResult = await brain.saveMessage(
-  "memory-uuid",
-  "Hello, this is a test message",
-  "user",
-  "conversation-123"
+const brain = new BrainAPI({
+  pat: process.env.BRAIN_PAT!,
+  region: "us-east1",
+  brainId: "default",
+});
+
+const ingested = await brain.ingest.text("Ada Lovelace wrote the first algorithm.");
+await brain.tasks.wait(ingested.task_id);
+
+const context = await brain.query({
+  text: "Who wrote the first algorithm?",
+  as_of: "2024-06-01T00:00:00Z",
+  include_validity_unknown: true,
+});
+
+console.log(context.text_context);
+```
+
+`LumenBrain` is an alias of `BrainAPI` if you prefer that name.
+
+## Configuration
+
+Provide **either** `region` **or** `baseUrl`. There is no silent default host.
+
+| Option | Description |
+| --- | --- |
+| `pat` | BrainAPI personal access token (required) |
+| `region` | Hosted region, for example `us-east1` or `europe-central2` |
+| `baseUrl` | Full origin for self-hosted or custom endpoints |
+| `brainId` | Default workspace sent as `X-Brain-ID` (defaults to `default`) |
+| `authScheme` | `both` (default), `bearer`, or `header` |
+| `fetch` | Custom `fetch` implementation |
+| `timeoutMs` | Request timeout |
+| `userAgent` | Override the SDK `User-Agent` |
+
+Hosted regional URL:
+
+```text
+https://system.<region>.brainapi.lumen-labs.ai
+```
+
+```ts
+import { regionalBaseUrl } from "@lumenlabs/lumen-brain";
+
+regionalBaseUrl("europe-central2");
+// https://system.europe-central2.brainapi.lumen-labs.ai
+```
+
+Per-call workspace override:
+
+```ts
+await brain.retrieve.context(
+  { text: "latest status" },
+  { brainId: "another-workspace" },
 );
 
-// Query memory
-const queryResult = await brain.queryMemory(
-  "What was the test message?",
-  "memory-uuid",
-  "conversation-123"
-);
-
-// Inject knowledge
-const knowledgeResult = await brain.injectKnowledge(
-  "memory-uuid",
-  "Important information to remember",
-  "event"
-);
+const other = brain.withBrain("another-workspace");
 ```
 
-## API Reference
+## Authentication
 
-### LumenBrainDriver
+The server accepts either (or both):
 
-The main class for interacting with the Lumen Brain API.
+- `Authorization: Bearer <pat>`
+- `BrainPAT: <pat>`
 
-```typescript
-class LumenBrainDriver {
-  constructor(apiKey: string);
+The SDK sends **both** by default. Set `authScheme: "bearer"` or `authScheme: "header"` to send only one.
 
-  // Save a message to memory
-  async saveMessage(
-    memoryUuid: string,
-    content: string,
-    role?: "user" | "assistant",
-    conversationId?: string,
-    metadata?: Record<string, any>
-  ): Promise<MemoryUpdateResponse>;
+Workspace isolation uses `X-Brain-ID`. System routes (`/system`, `/health`, `/meta/login-info`) omit that header.
 
-  // Inject knowledge into memory
-  async injectKnowledge(
-    memoryUuid: string,
-    content: string,
-    resourceType?: MemoryContentType,
-    metadata?: Record<string, any>
-  ): Promise<MemoryUpdateResponse>;
+## Ingest
 
-  // Query memory for relevant information
-  async queryMemory(
-    text: string,
-    memoryUuid: string,
-    conversationId: string
-  ): Promise<MemoryQueryResponse>;
+Ingest calls return `202` with a `task_id`. Poll or `wait` until the task is terminal.
 
-  // Fetch information about entities
-  async fetchInfo(
-    memoryUuid: string,
-    entities: string[],
-    info: string,
-    depth?: number // default is 2
-  ): Promise<QueryEntitiesResponse>;
-}
+```ts
+const { task_id } = await brain.ingest.text("A short note.");
+await brain.waitForTask(task_id);
+
+await brain.ingest.json({ json_data: { title: "Note", body: "…" } });
+await brain.ingest.url("https://example.com/article");
+await brain.ingest.file({ file: new Blob(["…"]), filename: "notes.txt" });
+await brain.ingest.structured({
+  data: [{ object: { type: "Person", name: "Ada" } }],
+});
+
+await brain.tasks.cancel(task_id, { mode: "keep_saved" });
+await brain.tasks.purge(task_id, { source_key: "notes.txt" });
 ```
 
-### Content Types
+`ingest.text` also accepts the full OpenAPI body (`data`, `meta_keys`, `source_timestamp`, `group_tracking`, …).
 
-The SDK supports various content types for knowledge injection:
+## Retrieve, search, and context
 
-- `file`
-- `event`
-- `webpage`
-- `email`
-- `message` (for conversation messages)
+```ts
+const context = await brain.retrieve.context({
+  text: "What did Ada invent?",
+  as_of: "2024-01-01T00:00:00Z",
+  include_validity_unknown: true,
+  annotate_conflicts: true,
+});
 
-### Response Types
+const hits = await brain.retrieve.search({
+  query: "Ada",
+  k: 8,
+  as_of: "2024-01-01T00:00:00Z",
+});
 
-```typescript
-interface MemoryQueryResponse {
-  context: string; // The textual context relevant for the query
-}
-
-interface MemoryUpdateResponse {
-  error?: string; // If the operation failed, this will contain the error message
-  task_id: string; // The task ID of the operation
-  result?: {
-    memory_id: string;
-    conversation_id?: string;
-  };
-}
+await brain.retrieve.query({ text: "Ada", as_of: "2024-01-01T00:00:00Z" });
+await brain.retrieve.entityStatus("Ada");
+await brain.retrieve.neighbors({ entity_id: "node-uuid" });
+await brain.retrieve.recommend({ target: "Ada" });
 ```
 
-interface QueryEntitiesResponse {
-nodes: Node[];
-most_relevant_relation: Relationship | null;
-most_relevant_confidence: number | null; // The confidence of the most relevant relation (0-1)
-}
+`as_of` is fail-closed on the server: facts whose validity cannot be decided at that timestamp are dropped unless `include_validity_unknown` is true.
 
-## Error Handling
+`brain.query(...)` is an alias of `brain.retrieve.context(...)`.
 
-The SDK includes built-in error handling and logging:
+## Facts and verification
 
-```typescript
+Facts are `unverified`, `verified`, or `rejected`.
+
+```ts
+const { facts } = await brain.facts.list({ state: "unverified" });
+await brain.facts.verify(facts[0].fact_id, { verified_by: "reviewer" });
+await brain.facts.reject(facts[0].fact_id, { note: "stale" });
+await brain.facts.reset(facts[0].fact_id);
+```
+
+## Conflicts
+
+```ts
+const open = await brain.conflicts.list({ status: "open" });
+await brain.conflicts.scan();
+await brain.conflicts.resolve(open.conflicts[0].id!, { winning_fact_id: "fact-id" });
+await brain.conflicts.dismiss(open.conflicts[0].id!, { notes: "duplicate" });
+```
+
+## Graph entities and relationships
+
+```ts
+await brain.graph.addEntity({ name: "Ada", labels: ["Person"] });
+await brain.graph.updateEntity({ uuid: "node-uuid", new_description: "Mathematician" });
+await brain.graph.addRelationship({
+  subject_uuid: "node-a",
+  predicate_name: "wrote",
+  predicate_description: "authored",
+  object_uuid: "node-b",
+});
+```
+
+## Errors
+
+Failed responses throw `BrainAPIError` with the v2 envelope fields when present:
+
+```ts
+import { BrainAPIError } from "@lumenlabs/lumen-brain";
+
 try {
-  const result = await brain.saveMessage("uuid", "content");
+  await brain.facts.get("missing");
 } catch (error) {
-  console.error("Failed to save message:", error);
+  if (error instanceof BrainAPIError) {
+    console.error(error.status, error.code, error.resolution, error.requestId);
+  }
 }
 ```
+
+## Breaking changes from 1.x
+
+| 1.x | 2.x |
+| --- | --- |
+| `new LumenBrainDriver(apiKey)` | `new BrainAPI({ pat, region, brainId })` |
+| `X-LumenBrain-ApiKey` | `Authorization: Bearer` / `BrainPAT` + `X-Brain-ID` |
+| Hardcoded `api.brain.lumen-labs.ai` / `api.brainapi.lumen-labs.ai` | `region` or `baseUrl` |
+| `saveMessage` / `queryMemory` / `injectKnowledge` | `ingest.*` / `retrieve.context` / `query` |
+| `memory_uuid`, `conversation_id` | `brainId` (`X-Brain-ID`) and optional `group_tracking` |
+
+Do not publish this package from a fork unless you own the npm package. Publishing requires the owner's npm access.
 
 ## Development
 
-To build the project:
-
 ```bash
+npm install
+npm run lint
+npm test
 npm run build
 ```
+
+Tests mock `fetch`. They do not call a live BrainAPI host or require secrets.
 
 ## License
 
 MIT
-
-## Author
-
-Christian Nonis <alch.infoemail@gmail.com>

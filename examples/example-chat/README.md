@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BrainAPI example chat
 
-## Getting Started
+Minimal Next.js app that ingests a user message into BrainAPI v2 and retrieves context for a reply.
 
-First, run the development server:
+## Setup
+
+From the SDK repo root:
+
+```bash
+npm install
+npm run build
+```
+
+Then in this directory:
+
+```bash
+npm install
+```
+
+Copy environment variables (do not commit secrets):
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `BRAIN_PAT` | yes | BrainAPI personal access token |
+| `BRAIN_ID` | no | Workspace id sent as `X-Brain-ID` (defaults to `default`) |
+| `BRAIN_REGION` | no | Hosted region such as `us-east1` or `europe-central2` |
+| `BRAIN_API_BASE_URL` | no | Custom origin; mutually exclusive with `BRAIN_REGION` |
+| `COMPLETION_URL` | no | Optional HTTP endpoint that turns retrieved context into a reply |
+| `COMPLETION_TOKEN` | no | Bearer token for `COMPLETION_URL` |
+
+If `COMPLETION_URL` is unset, the API route returns the retrieved BrainAPI context as the assistant message.
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000).

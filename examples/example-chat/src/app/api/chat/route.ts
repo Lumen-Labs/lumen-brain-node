@@ -1,123 +1,79 @@
-import OpenAI from "openai";
-import { LumenBrainDriver } from "@lumenlabs/lumen-brain";
+import { BrainAPI } from "@lumenlabs/lumen-brain";
 
-// Init the openai client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Init the lumen brain driver
-const brain = new LumenBrainDriver(process.env.LUMEN_BRAIN_API_KEY!);
+function createBrain() {
+  const pat = process.env.BRAIN_PAT;
+  if (!pat) {
+    throw new Error("BRAIN_PAT is required");
+  }
+  const baseUrl = process.env.BRAIN_API_BASE_URL;
+  const region = process.env.BRAIN_REGION ?? (baseUrl ? undefined : "us-east1");
+  return new BrainAPI({
+    pat,
+    brainId: process.env.BRAIN_ID ?? "default",
+    baseUrl,
+    region,
+  });
+}
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    // Receive the frontend request =============================
-    const {
-      message, // The user text message
+    const { message, brainId } = await req.json();
+    if (typeof message !== "string" || message.trim().length === 0) {
+      return Response.json({ error: "message is required" }, { status: 400 });
+    }
 
-      // The id of the memory (unique for each user)
-      // used to to keep track of all the memories for the specific
-      // user, it's not related to the current conversation and is used
-      // to identity the knowledge base for the specific user
-      memoryId,
+    const brain = createBrain();
+    const client = typeof brainId === "string" && brainId.trim() ? brain.withBrain(brainId) : brain;
 
-      // The id of the conversation current conversation,
-      // used to keep track of the conversation history
-      conversationId,
-    } = await req.json();
-    // ============================================================
+    const ingested = await client.ingest.text({
+      text: message,
+      group_tracking: "example-chat",
+    });
 
-    // Save the last message to the brain =========================
-    const brainResponse = await brain.saveMessage(
-      memoryId, // Save the message to the user's memory
-      message,
-      "user",
+    const context = await client.query({
+      text: message,
+      include_validity_unknown: true,
+    });
 
-      // Optional: conversation_id received from previous savings,
-      // if not provided, a new conversation id will be generated
-      // and returned as result
-      conversationId
-    );
-
-    const { result, task_id, error } = brainResponse;
-    console.log(result, task_id, error);
-
-    if (error) {
-      console.error(error);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+    const completionUrl = process.env.COMPLETION_URL;
+    if (!completionUrl) {
+      return Response.json({
+        content: context.text_context || "No retrieved context yet.",
+        taskId: ingested.task_id,
       });
     }
-    // ============================================================
 
-    // Retrieve the relevant context from the brain ============================
-    const queryResponse = await brain.queryMemory(
-      message,
-      result!.memory_id,
-      result!.conversation_id!
-    );
-
-    // Add it to the user message, it will contain:
-    // - relevant memories
-    // - past conversation messages
-    // - connection between memories
-    const prompt = message + queryResponse.context;
-    // ============================================================
-
-    // Send the request to the llm ================================
-    // we are using the responses api instead of the completions
-    // because it allows us to send the context and also a system
-    // prompt alongside the user message so in general it's more
-    // flexible than the completions api
-    const stream = await openai.responses.create({
-      model: "gpt-4o",
-      input: prompt,
-      stream: true,
-    });
-    // ============================================================
-
-    // Send the stream to the frontend ============================
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            if (chunk.type === "response.output_text.delta") {
-              const content = chunk.delta || "";
-              if (content) {
-                const data = `data: ${JSON.stringify({
-                  content,
-                  conversationId: result!.conversation_id!,
-                })}\n\n`;
-                controller.enqueue(encoder.encode(data));
-              }
-            }
-          }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
-
-    // Keep the connection alive to send the chunks
-    return new Response(readable, {
+    const completionResponse = await fetch(completionUrl, {
+      method: "POST",
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
+        "Content-Type": "application/json",
+        ...(process.env.COMPLETION_TOKEN
+          ? { Authorization: `Bearer ${process.env.COMPLETION_TOKEN}` }
+          : {}),
       },
+      body: JSON.stringify({
+        input: `${context.text_context}\n\n${message}`,
+      }),
     });
-    // ============================================================
+
+    if (!completionResponse.ok) {
+      return Response.json({ error: "Completion request failed" }, { status: 502 });
+    }
+
+    const completion = await completionResponse.json();
+    const content =
+      typeof completion === "string"
+        ? completion
+        : completion.content ?? completion.text ?? JSON.stringify(completion);
+
+    return Response.json({
+      content,
+      taskId: ingested.task_id,
+    });
   } catch (error) {
     console.error("Error in chat API:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
 }
