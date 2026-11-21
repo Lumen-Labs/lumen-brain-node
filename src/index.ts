@@ -3,7 +3,6 @@ export {
   HOSTED_REGIONS,
   regionalBaseUrl,
   resolveBaseUrl,
-  DEFAULT_BRAIN_ID,
   BRAIN_ID_HEADER,
   BRAIN_PAT_HEADER,
 } from "./config";

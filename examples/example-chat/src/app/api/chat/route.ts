@@ -9,7 +9,7 @@ function createBrain() {
   const region = process.env.BRAIN_REGION ?? (baseUrl ? undefined : "us-east1");
   return new BrainAPI({
     pat,
-    brainId: process.env.BRAIN_ID ?? "default",
+    brainId: process.env.BRAIN_ID?.trim() || undefined,
     baseUrl,
     region,
   });

@@ -28,7 +28,8 @@ describe("BrainAPIError", () => {
 
   it("falls back to detail strings and status", () => {
     expect(BrainAPIError.fromResponse(500, { detail: "boom" }).message).toBe("boom");
-    expect(BrainAPIError.fromResponse(502, "gateway").message).toBe(
+    expect(BrainAPIError.fromResponse(502, "gateway").message).toBe("gateway");
+    expect(BrainAPIError.fromResponse(502, null).message).toBe(
       "BrainAPI request failed (502)",
     );
   });
@@ -42,6 +43,32 @@ describe("BrainAPIError", () => {
     expect(error.requestId).toBe("header-id");
     expect(error.code).toBeUndefined();
     expect(error.message).toBe("BrainAPI request failed (502)");
+  });
+
+  it("surfaces 404 and 503 server messages from several body shapes", () => {
+    expect(BrainAPIError.fromResponse(404, "brain missing").message).toBe("brain missing");
+    expect(
+      BrainAPIError.fromResponse(404, { error: "workspace not found" }).message,
+    ).toBe("workspace not found");
+    expect(
+      BrainAPIError.fromResponse(503, { detail: { msg: "neo4j unavailable" } }).message,
+    ).toBe("neo4j unavailable");
+    expect(
+      BrainAPIError.fromResponse(404, {
+        detail: [{ loc: ["path", "id"], msg: "entity not found", type: "not_found" }],
+      }).message,
+    ).toBe("entity not found");
+    expect(
+      BrainAPIError.fromResponse(503, {
+        detail: "storage offline",
+        error: {
+          code: "DEPENDENCY_UNAVAILABLE",
+          message: "storage offline",
+          resolution: "retry",
+          request_id: "r1",
+        },
+      }).message,
+    ).toBe("storage offline");
   });
 
   it("is thrown by the client on non-2xx responses", async () => {

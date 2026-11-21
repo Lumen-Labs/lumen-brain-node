@@ -1,5 +1,3 @@
-export const DEFAULT_BRAIN_ID = "default";
-
 export const BRAIN_ID_HEADER = "X-Brain-ID";
 export const BRAIN_PAT_HEADER = "BrainPAT";
 
@@ -95,7 +93,7 @@ export function resolvePat(pat: string): string {
   return trimmed;
 }
 
-export function resolveBrainId(brainId?: string): string {
+export function resolveBrainId(brainId?: string): string | undefined {
   const trimmed = brainId?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_BRAIN_ID;
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }

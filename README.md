@@ -20,7 +20,7 @@ import { BrainAPI } from "@lumenlabs/lumen-brain";
 const brain = new BrainAPI({
   pat: process.env.BRAIN_PAT!,
   region: "us-east1",
-  brainId: "default",
+  brainId: process.env.BRAIN_ID!,
 });
 
 const ingested = await brain.ingest.text("Ada Lovelace wrote the first algorithm.");
@@ -46,7 +46,7 @@ Provide **either** `region` **or** `baseUrl`. There is no silent default host.
 | `pat` | BrainAPI personal access token (required) |
 | `region` | Hosted region, for example `us-east1` or `europe-central2` |
 | `baseUrl` | Full origin for self-hosted or custom endpoints |
-| `brainId` | Default workspace sent as `X-Brain-ID` (defaults to `default`) |
+| `brainId` | Workspace sent as `X-Brain-ID`. Omitted unless you set it on the client or the call |
 | `authScheme` | `both` (default), `bearer`, or `header` |
 | `fetch` | Custom `fetch` implementation |
 | `timeoutMs` | Request timeout |
@@ -86,7 +86,7 @@ The server accepts either (or both):
 
 The SDK sends **both** by default. Set `authScheme: "bearer"` or `authScheme: "header"` to send only one.
 
-Workspace isolation uses `X-Brain-ID`. System routes (`/system`, `/health`, `/meta/login-info`) omit that header.
+Workspace isolation uses `X-Brain-ID` when you set `brainId` on the client or the call. The SDK does not invent a workspace id. System routes (`/system`, `/health`, `/meta/login-info`) omit that header.
 
 ## Ingest
 

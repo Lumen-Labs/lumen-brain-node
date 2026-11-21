@@ -30,7 +30,7 @@ export class HttpClient {
   constructor(
     private readonly baseUrl: string,
     private readonly pat: string,
-    private readonly defaultBrainId: string,
+    private readonly defaultBrainId: string | undefined,
     private readonly authScheme: AuthScheme,
     private readonly fetchImpl: typeof fetch,
     private readonly timeoutMs?: number,
@@ -134,10 +134,13 @@ export class HttpClient {
     }
 
     const skipBrainId = options.brainId === null || isBrainExempt(path);
-    if (skipBrainId) {
-      headers.delete(BRAIN_ID_HEADER);
+    const brainId = skipBrainId
+      ? undefined
+      : options.brainId?.trim() || this.defaultBrainId;
+    if (brainId) {
+      headers.set(BRAIN_ID_HEADER, brainId);
     } else {
-      headers.set(BRAIN_ID_HEADER, options.brainId?.trim() || this.defaultBrainId);
+      headers.delete(BRAIN_ID_HEADER);
     }
 
     if (options.form) {

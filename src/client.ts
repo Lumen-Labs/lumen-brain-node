@@ -90,7 +90,7 @@ const TERMINAL_TASK_STATUSES = new Set([
 
 export class BrainAPI {
   readonly baseUrl: string;
-  readonly brainId: string;
+  readonly brainId: string | undefined;
   readonly authScheme: NonNullable<BrainAPIClientOptions["authScheme"]>;
 
   private readonly http: HttpClient;

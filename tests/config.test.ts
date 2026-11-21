@@ -72,13 +72,13 @@ describe("BrainAPI constructor", () => {
     expect(() => new BrainAPI({ pat: "  ", region: "us-east1" })).toThrow(/pat/);
   });
 
-  it("defaults brainId to default", () => {
+  it("does not invent a brain id", () => {
     const client = new BrainAPI({
       pat: "pat",
       region: "us-east1",
       fetch: async () => new Response("{}"),
     });
-    expect(client.brainId).toBe("default");
+    expect(client.brainId).toBeUndefined();
     expect(client.baseUrl).toBe("https://system.us-east1.brainapi.lumen-labs.ai");
   });
 });

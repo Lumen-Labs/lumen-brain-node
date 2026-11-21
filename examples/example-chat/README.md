@@ -26,7 +26,7 @@ cp .env.example .env.local
 | Variable | Required | Description |
 | --- | --- | --- |
 | `BRAIN_PAT` | yes | BrainAPI personal access token |
-| `BRAIN_ID` | no | Workspace id sent as `X-Brain-ID` (defaults to `default`) |
+| `BRAIN_ID` | no | Workspace id sent as `X-Brain-ID` when set |
 | `BRAIN_REGION` | no | Hosted region such as `us-east1` or `europe-central2` |
 | `BRAIN_API_BASE_URL` | no | Custom origin; mutually exclusive with `BRAIN_REGION` |
 | `COMPLETION_URL` | no | Optional HTTP endpoint that turns retrieved context into a reply |

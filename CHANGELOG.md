@@ -9,6 +9,8 @@ Breaking rewrite of `@lumenlabs/lumen-brain` for BrainAPI v2.
 - Require `region` or `baseUrl`. Hosted regions resolve to `https://system.<region>.brainapi.lumen-labs.ai` (`us-east1`, `europe-central2`).
 - Cover ingest, retrieve/search/context (`as_of`, validity unknown), chat-style `query`, facts, conflicts, graph entities/relationships, tasks, brains, and meta endpoints.
 - Dual ESM/CJS build via tsup. `LumenBrain` remains as an alias of `BrainAPI`.
+- `X-Brain-ID` is sent only when the caller sets `brainId`; there is no default workspace id.
+- `BrainAPIError` surfaces the server message for 404/503 and other error bodies.
 
 ## 1.2.2
 

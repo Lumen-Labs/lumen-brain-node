@@ -66,6 +66,14 @@ describe("HTTP auth and headers", () => {
     expect(calls[0]?.redirect).toBe("error");
   });
 
+  it("omits X-Brain-ID when the caller did not set a brain id", async () => {
+    const { fetchImpl, calls } = createMockFetch(() =>
+      jsonResponse({ text_context: "", triples: [] }),
+    );
+    await createClient(fetchImpl).retrieve.context({ text: "hello" });
+    expect(calls[0]?.headers["x-brain-id"]).toBeUndefined();
+  });
+
   it("allows a per-call X-Brain-ID override", async () => {
     const { fetchImpl, calls } = createMockFetch(() =>
       jsonResponse({ facts: [], total: 0 }),

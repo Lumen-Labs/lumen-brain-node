@@ -49,9 +49,7 @@ export class BrainAPIError extends Error {
     const info = envelope && isRecord(envelope.error) ? envelope.error : undefined;
     const detail = envelope?.detail ?? body;
     const message =
-      asNonEmptyString(info?.message) ||
-      (typeof envelope?.detail === "string" ? envelope.detail : undefined) ||
-      `BrainAPI request failed (${status})`;
+      extractServerMessage(body) || `BrainAPI request failed (${status})`;
 
     return new BrainAPIError(message, {
       status,
@@ -65,9 +63,45 @@ export class BrainAPIError extends Error {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function asNonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+export function extractServerMessage(body: unknown): string | undefined {
+  if (typeof body === "string") {
+    return asNonEmptyString(body);
+  }
+  if (!isRecord(body)) {
+    return undefined;
+  }
+
+  return (
+    messageFromUnknown(body.error) ||
+    messageFromUnknown(body.detail) ||
+    asNonEmptyString(body.message)
+  );
+}
+
+function messageFromUnknown(value: unknown): string | undefined {
+  const direct = asNonEmptyString(value);
+  if (direct) {
+    return direct;
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => messageFromUnknown(item))
+      .filter((part): part is string => Boolean(part));
+    return parts.length > 0 ? parts.join("; ") : undefined;
+  }
+  if (isRecord(value)) {
+    return (
+      asNonEmptyString(value.message) ||
+      asNonEmptyString(value.msg) ||
+      asNonEmptyString(value.detail)
+    );
+  }
+  return undefined;
 }
