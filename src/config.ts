@@ -22,23 +22,50 @@ export function regionalBaseUrl(region: string): string {
   return `https://system.${normalized}.brainapi.lumen-labs.ai`;
 }
 
-export function normalizeBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+export function normalizeBaseUrl(
+  baseUrl: string,
+  options: { allowHttp?: boolean } = {},
+): string {
+  const trimmed = baseUrl.trim();
   if (!trimmed) {
     throw new Error("baseUrl must be a non-empty string");
   }
-  return trimmed;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid baseUrl "${baseUrl}"`);
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error("baseUrl must not include a query string or fragment");
+  }
+
+  if (parsed.protocol === "http:") {
+    if (!options.allowHttp) {
+      throw new Error(
+        "baseUrl must use HTTPS. Set allowHttp: true for local plaintext development.",
+      );
+    }
+  } else if (parsed.protocol !== "https:") {
+    throw new Error("baseUrl must use HTTPS");
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/, "");
+  return `${parsed.origin}${pathname === "/" ? "" : pathname}`;
 }
 
 export function resolveBaseUrl(options: {
   baseUrl?: string;
   region?: string;
+  allowHttp?: boolean;
 }): string {
   if (options.baseUrl && options.region) {
     throw new Error("Provide either baseUrl or region, not both");
   }
   if (options.baseUrl) {
-    return normalizeBaseUrl(options.baseUrl);
+    return normalizeBaseUrl(options.baseUrl, { allowHttp: options.allowHttp });
   }
   if (options.region) {
     return regionalBaseUrl(options.region);
@@ -57,6 +84,7 @@ export interface BrainAPIClientOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;
   userAgent?: string;
+  allowHttp?: boolean;
 }
 
 export function resolvePat(pat: string): string {

@@ -102,6 +102,7 @@ export class BrainAPI {
     this.baseUrl = resolveBaseUrl({
       baseUrl: options.baseUrl,
       region: options.region,
+      allowHttp: options.allowHttp,
     });
     this.brainId = resolveBrainId(options.brainId);
     this.authScheme = options.authScheme ?? "both";
@@ -432,6 +433,7 @@ export class BrainAPI {
       path: "/ingest/",
       body,
       ...options,
+      brainId: typeof input === "string" ? options?.brainId : (input.brain_id ?? options?.brainId),
     });
   }
 
@@ -448,6 +450,7 @@ export class BrainAPI {
       path: "/ingest/",
       body,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -469,8 +472,13 @@ export class BrainAPI {
     options?: RequestOptions,
   ): Promise<IngestionAcceptedResponse> {
     const form = new FormData();
-    const filename = input.filename ?? (input.file instanceof File ? input.file.name : "upload");
-    form.append("file", input.file, filename);
+    const filename =
+      input.filename ??
+      (typeof File !== "undefined" && input.file instanceof File ? input.file.name : "upload");
+    const filePart = input.contentType
+      ? new Blob([input.file], { type: input.contentType })
+      : input.file;
+    form.append("file", filePart, filename);
     if (input.group_tracking) {
       form.append("group_tracking", input.group_tracking);
     }
@@ -492,6 +500,7 @@ export class BrainAPI {
       path: "/ingest/structured",
       body: input,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -504,6 +513,7 @@ export class BrainAPI {
       path: "/ingest/structured/batch",
       body: input,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -516,6 +526,7 @@ export class BrainAPI {
       path: "/retrieve/context",
       body: input,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -525,6 +536,7 @@ export class BrainAPI {
       path: "/retrieve/search",
       body: input,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -532,6 +544,7 @@ export class BrainAPI {
     return this.request<SearchResponse>({
       path: "/retrieve/search",
       query: {
+        ...(input.extras ?? {}),
         query: input.query,
         k: input.k,
         as_of: input.as_of ?? undefined,
@@ -543,9 +556,12 @@ export class BrainAPI {
           : input.community_labels,
         expand: input.expand,
         fusion: input.fusion ?? undefined,
+        fusion_alpha: input.fusion_alpha ?? undefined,
         rerank: input.rerank ?? undefined,
+        mode: input.mode,
         target: input.target ?? undefined,
         profile_stages: input.profile_stages,
+        include_rejected: input.include_rejected,
       },
       ...options,
     });
@@ -590,6 +606,7 @@ export class BrainAPI {
       path: "/retrieve/recommend",
       body: input,
       ...options,
+      brainId: input.brain_id ?? options?.brainId,
     });
   }
 
@@ -602,6 +619,7 @@ export class BrainAPI {
           identification_params: input.identification_params,
           looking_for: input.looking_for,
           limit: input.limit,
+          include_rejected: input.include_rejected,
         },
         ...options,
       });
@@ -815,25 +833,56 @@ export class BrainAPI {
     taskId: string,
     options: WaitForTaskOptions = {},
   ): Promise<TaskStateResponse> {
-    const { intervalMs = 1000, timeoutMs = 120_000, poll, ...requestOptions } = options;
-    const started = Date.now();
+    const { intervalMs = 1000, timeoutMs = 120_000, poll, signal, ...requestOptions } = options;
+    const deadline = Date.now() + timeoutMs;
+    const timeoutController = new AbortController();
+    const timer = setTimeout(() => timeoutController.abort(), timeoutMs);
+    const combined = mergeSignals(signal, timeoutController.signal);
 
-    while (true) {
-      const task = await this.getTask(taskId, requestOptions);
-      if (poll) {
-        poll(task);
+    try {
+      while (true) {
+        if (Date.now() >= deadline || timeoutController.signal.aborted) {
+          throw taskTimeout(taskId);
+        }
+
+        let task: TaskStateResponse;
+        try {
+          task = await this.getTask(taskId, { ...requestOptions, signal: combined });
+        } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
+          if (timeoutController.signal.aborted || Date.now() >= deadline) {
+            throw taskTimeout(taskId, error);
+          }
+          throw error;
+        }
+
+        if (poll) {
+          poll(task);
+        }
+        if (TERMINAL_TASK_STATUSES.has((task.status ?? "").toLowerCase())) {
+          return task;
+        }
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0 || timeoutController.signal.aborted) {
+          throw taskTimeout(taskId, task);
+        }
+        try {
+          await sleep(Math.min(intervalMs, remaining), combined);
+        } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
+          if (timeoutController.signal.aborted || Date.now() >= deadline) {
+            throw taskTimeout(taskId, task);
+          }
+          throw error;
+        }
       }
-      if (TERMINAL_TASK_STATUSES.has((task.status ?? "").toLowerCase())) {
-        return task;
-      }
-      if (Date.now() - started >= timeoutMs) {
-        throw new BrainAPIError(`Timed out waiting for task ${taskId}`, {
-          status: 0,
-          code: "TASK_TIMEOUT",
-          detail: task,
-        });
-      }
-      await sleep(intervalMs, requestOptions.signal);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -865,15 +914,38 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       reject(signal.reason ?? new Error("aborted"));
       return;
     }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason ?? new Error("aborted"));
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("aborted"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort);
+  });
+}
+
+function mergeSignals(...signals: Array<AbortSignal | undefined>): AbortSignal {
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (!signal) {
+      continue;
+    }
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return controller.signal;
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
+}
+
+function taskTimeout(taskId: string, detail?: unknown): BrainAPIError {
+  return new BrainAPIError(`Timed out waiting for task ${taskId}`, {
+    status: 0,
+    code: "TASK_TIMEOUT",
+    detail,
   });
 }
 

@@ -15,17 +15,42 @@ function createBrain() {
   });
 }
 
+function readChatRequest(payload: unknown): { message: string; brainId?: string } | { error: string } {
+  if (payload === null || typeof payload !== "object") {
+    return { error: "JSON object body is required" };
+  }
+  const body = payload as Record<string, unknown>;
+  if (typeof body.message !== "string" || body.message.trim().length === 0) {
+    return { error: "message is required" };
+  }
+  if (body.brainId !== undefined && typeof body.brainId !== "string") {
+    return { error: "brainId must be a string" };
+  }
+  return {
+    message: body.message,
+    brainId: typeof body.brainId === "string" ? body.brainId : undefined,
+  };
+}
+
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const { message, brainId } = await req.json();
-    if (typeof message !== "string" || message.trim().length === 0) {
-      return Response.json({ error: "message is required" }, { status: 400 });
+    let payload: unknown;
+    try {
+      payload = await req.json();
+    } catch {
+      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
+    const parsed = readChatRequest(payload);
+    if ("error" in parsed) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+    const { message, brainId } = parsed;
+
     const brain = createBrain();
-    const client = typeof brainId === "string" && brainId.trim() ? brain.withBrain(brainId) : brain;
+    const client = brainId && brainId.trim() ? brain.withBrain(brainId) : brain;
 
     const ingested = await client.ingest.text({
       text: message,
@@ -56,6 +81,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         input: `${context.text_context}\n\n${message}`,
       }),
+      signal: AbortSignal.timeout(25_000),
     });
 
     if (!completionResponse.ok) {
@@ -73,6 +99,9 @@ export async function POST(req: Request) {
       taskId: ingested.task_id,
     });
   } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return Response.json({ error: "Completion request timed out" }, { status: 504 });
+    }
     console.error("Error in chat API:", error);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }

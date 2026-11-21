@@ -51,6 +51,7 @@ Provide **either** `region` **or** `baseUrl`. There is no silent default host.
 | `fetch` | Custom `fetch` implementation |
 | `timeoutMs` | Request timeout |
 | `userAgent` | Override the SDK `User-Agent` |
+| `allowHttp` | Opt in to plaintext `http://` base URLs (rejected by default) |
 
 Hosted regional URL:
 
@@ -140,9 +141,12 @@ Facts are `unverified`, `verified`, or `rejected`.
 
 ```ts
 const { facts } = await brain.facts.list({ state: "unverified" });
-await brain.facts.verify(facts[0].fact_id, { verified_by: "reviewer" });
-await brain.facts.reject(facts[0].fact_id, { note: "stale" });
-await brain.facts.reset(facts[0].fact_id);
+const fact = facts[0];
+if (fact) {
+  await brain.facts.verify(fact.fact_id, { verified_by: "reviewer" });
+  await brain.facts.reject(fact.fact_id, { note: "stale" });
+  await brain.facts.reset(fact.fact_id);
+}
 ```
 
 ## Conflicts
@@ -150,8 +154,11 @@ await brain.facts.reset(facts[0].fact_id);
 ```ts
 const open = await brain.conflicts.list({ status: "open" });
 await brain.conflicts.scan();
-await brain.conflicts.resolve(open.conflicts[0].id!, { winning_fact_id: "fact-id" });
-await brain.conflicts.dismiss(open.conflicts[0].id!, { notes: "duplicate" });
+const conflict = open.conflicts[0];
+if (conflict?.id) {
+  await brain.conflicts.resolve(conflict.id, { winning_fact_id: "fact-id" });
+  await brain.conflicts.dismiss(conflict.id, { notes: "duplicate" });
+}
 ```
 
 ## Graph entities and relationships

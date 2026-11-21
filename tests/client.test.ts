@@ -96,10 +96,18 @@ describe("BrainAPI resources", () => {
       query: "Ada",
       as_of: "2024-06-01T00:00:00Z",
       channels: ["graph"],
+      mode: "catalog",
+      fusion_alpha: 0.5,
+      include_rejected: true,
+      extras: { source: "sdk" },
     });
     expect(calls[2]?.method).toBe("GET");
     expect(calls[2]?.url).toContain("as_of=2024-06-01T00%3A00%3A00Z");
     expect(calls[2]?.url).toContain("channels=graph");
+    expect(calls[2]?.url).toContain("mode=catalog");
+    expect(calls[2]?.url).toContain("fusion_alpha=0.5");
+    expect(calls[2]?.url).toContain("include_rejected=true");
+    expect(calls[2]?.url).toContain("source=sdk");
 
     await client.retrieve.query({
       text: "Ada",
@@ -123,6 +131,7 @@ describe("BrainAPI resources", () => {
     await client.retrieve.neighbors({
       identification_params: { name: "Ada" },
       looking_for: "Project",
+      include_rejected: true,
     });
     await client.retrieve.relationships({ limit: 10 });
     await client.retrieve.entities({ skip: 0 });
@@ -175,6 +184,7 @@ describe("BrainAPI resources", () => {
     expect(calls[6]?.method).toBe("POST");
     expect(calls[6]?.body).toMatchObject({
       identification_params: { name: "Ada" },
+      include_rejected: true,
     });
   });
 
@@ -289,6 +299,51 @@ describe("BrainAPI resources", () => {
       name: "BrainAPIError",
       code: "TASK_TIMEOUT",
     });
+  });
+
+  it("times out waitForTask while a poll request is still pending", async () => {
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise((_, reject) => {
+        const abort = () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        };
+        if (init?.signal?.aborted) {
+          abort();
+          return;
+        }
+        init?.signal?.addEventListener("abort", abort, { once: true });
+      });
+    await expect(
+      createClient(fetchImpl).waitForTask("hung", { timeoutMs: 30 }),
+    ).rejects.toMatchObject({
+      name: "BrainAPIError",
+      code: "TASK_TIMEOUT",
+    });
+  });
+
+  it("routes ingest.brain_id onto X-Brain-ID", async () => {
+    const { fetchImpl, calls } = createMockFetch(() => jsonResponse(accepted));
+    const client = createClient(fetchImpl, { brainId: "tenant-a" });
+    await client.ingest.text({ text: "note", brain_id: "tenant-b" });
+    await client.ingest.structured({
+      data: [{ object: { type: "Person", name: "Ada" } }],
+      brain_id: "tenant-c",
+    });
+    expect(calls[0]?.headers["x-brain-id"]).toBe("tenant-b");
+    expect(calls[1]?.headers["x-brain-id"]).toBe("tenant-c");
+  });
+
+  it("uploads a Blob without a File global name fallback", async () => {
+    const { fetchImpl, calls } = createMockFetch(() => jsonResponse(accepted));
+    await createClient(fetchImpl).ingest.file({
+      file: new Blob(["hello"]),
+      contentType: "text/plain",
+    });
+    const uploaded = calls[0]?.form?.get("file");
+    expect(uploaded).toBeInstanceOf(Blob);
+    expect((uploaded as Blob).type).toBe("text/plain");
   });
 
   it("covers brains and meta helpers", async () => {

@@ -6,6 +6,7 @@ export interface MockCall {
   headers: Record<string, string>;
   body: unknown;
   form: FormData | null;
+  redirect?: RequestRedirect;
 }
 
 export function headerMap(headers?: HeadersInit): Record<string, string> {
@@ -54,6 +55,7 @@ export function createMockFetch(
       headers,
       body,
       form,
+      redirect: init.redirect,
     };
     calls.push(call);
     return handler(call);

@@ -49,6 +49,22 @@ describe("resolveBaseUrl", () => {
       "https://example.test/v2",
     );
   });
+
+  it("rejects query strings and fragments", () => {
+    expect(() => resolveBaseUrl({ baseUrl: "https://brain.example/v2?proxy=1" })).toThrow(
+      /query string or fragment/,
+    );
+    expect(() => resolveBaseUrl({ baseUrl: "https://brain.example/v2#x" })).toThrow(
+      /query string or fragment/,
+    );
+  });
+
+  it("rejects plaintext HTTP unless allowHttp is set", () => {
+    expect(() => resolveBaseUrl({ baseUrl: "http://localhost:8000" })).toThrow(/HTTPS/);
+    expect(resolveBaseUrl({ baseUrl: "http://localhost:8000", allowHttp: true })).toBe(
+      "http://localhost:8000",
+    );
+  });
 });
 
 describe("BrainAPI constructor", () => {

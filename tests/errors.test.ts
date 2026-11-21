@@ -33,6 +33,17 @@ describe("BrainAPIError", () => {
     );
   });
 
+  it("ignores non-string error fields and keeps the header request id", () => {
+    const error = BrainAPIError.fromResponse(
+      502,
+      { error: { request_id: 42, code: 7, message: null } },
+      "header-id",
+    );
+    expect(error.requestId).toBe("header-id");
+    expect(error.code).toBeUndefined();
+    expect(error.message).toBe("BrainAPI request failed (502)");
+  });
+
   it("is thrown by the client on non-2xx responses", async () => {
     const { fetchImpl } = createMockFetch(() =>
       jsonResponse(

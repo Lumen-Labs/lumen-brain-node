@@ -38,21 +38,21 @@ export class HttpClient {
   ) {}
 
   async request<T>(options: HttpRequestOptions): Promise<T> {
-    const url = this.buildUrl(options.path, options.query);
-    const headers = this.buildHeaders(options);
+    const path = normalizePath(options.path);
+    const url = this.buildUrl(path, options.query);
+    const headers = this.buildHeaders(path, options);
     const controller = new AbortController();
     const timeout =
       this.timeoutMs && this.timeoutMs > 0
         ? setTimeout(() => controller.abort(), this.timeoutMs)
         : undefined;
 
+    const onAbort = () => controller.abort(options.signal?.reason);
     if (options.signal) {
       if (options.signal.aborted) {
         controller.abort(options.signal.reason);
       } else {
-        options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason), {
-          once: true,
-        });
+        options.signal.addEventListener("abort", onAbort);
       }
     }
 
@@ -64,8 +64,9 @@ export class HttpClient {
           ? options.form
           : options.body === undefined
             ? undefined
-            : JSON.stringify(omitUndefined(options.body)),
+            : JSON.stringify(options.body),
         signal: controller.signal,
+        redirect: "error",
       });
 
       const requestId = response.headers.get("X-Request-ID") ?? undefined;
@@ -80,7 +81,7 @@ export class HttpClient {
       if (error instanceof BrainAPIError) {
         throw error;
       }
-      if (error instanceof Error && error.name === "AbortError") {
+      if (isAbortError(error, controller.signal, options.signal)) {
         throw new BrainAPIError("BrainAPI request timed out or was aborted", {
           status: 0,
           code: "REQUEST_ABORTED",
@@ -96,12 +97,12 @@ export class HttpClient {
       if (timeout) {
         clearTimeout(timeout);
       }
+      options.signal?.removeEventListener("abort", onAbort);
     }
   }
 
   private buildUrl(path: string, query?: object): string {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    const url = new URL(`${this.baseUrl}${normalizedPath}`);
+    const url = new URL(`${this.baseUrl}${path}`);
     if (query) {
       for (const [key, value] of Object.entries(query as Record<string, QueryValue>)) {
         if (value === undefined || value === null) {
@@ -120,7 +121,7 @@ export class HttpClient {
     return url.toString();
   }
 
-  private buildHeaders(options: HttpRequestOptions): Headers {
+  private buildHeaders(path: string, options: HttpRequestOptions): Headers {
     const headers = new Headers(options.headers);
     if (this.authScheme === "bearer" || this.authScheme === "both") {
       headers.set("Authorization", `Bearer ${this.pat}`);
@@ -132,9 +133,10 @@ export class HttpClient {
       headers.set("User-Agent", this.userAgent);
     }
 
-    const skipBrainId =
-      options.brainId === null || isBrainExempt(options.path);
-    if (!skipBrainId) {
+    const skipBrainId = options.brainId === null || isBrainExempt(path);
+    if (skipBrainId) {
+      headers.delete(BRAIN_ID_HEADER);
+    } else {
       headers.set(BRAIN_ID_HEADER, options.brainId?.trim() || this.defaultBrainId);
     }
 
@@ -152,26 +154,29 @@ export class HttpClient {
   }
 }
 
+export function normalizePath(path: string): string {
+  const withoutQuery = path.split("?")[0] ?? path;
+  return withoutQuery.startsWith("/") ? withoutQuery : `/${withoutQuery}`;
+}
+
 function isBrainExempt(path: string): boolean {
   return BRAIN_EXEMPT_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   );
 }
 
-function omitUndefined(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(omitUndefined);
+function isAbortError(
+  error: unknown,
+  controllerSignal: AbortSignal,
+  callerSignal?: AbortSignal,
+): boolean {
+  if (controllerSignal.aborted || callerSignal?.aborted) {
+    return true;
   }
-  if (value && typeof value === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (item !== undefined) {
-        result[key] = omitUndefined(item);
-      }
-    }
-    return result;
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
   }
-  return value;
+  return callerSignal !== undefined && error === callerSignal.reason;
 }
 
 async function readBody(response: Response): Promise<unknown> {

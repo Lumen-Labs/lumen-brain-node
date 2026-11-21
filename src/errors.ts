@@ -45,19 +45,19 @@ export class BrainAPIError extends Error {
     body: unknown,
     requestId?: string,
   ): BrainAPIError {
-    const envelope = isRecord(body) ? (body as ErrorResponseBody) : undefined;
-    const info = envelope?.error;
+    const envelope = isRecord(body) ? body : undefined;
+    const info = envelope && isRecord(envelope.error) ? envelope.error : undefined;
     const detail = envelope?.detail ?? body;
     const message =
-      info?.message ||
+      asNonEmptyString(info?.message) ||
       (typeof envelope?.detail === "string" ? envelope.detail : undefined) ||
       `BrainAPI request failed (${status})`;
 
     return new BrainAPIError(message, {
       status,
-      code: info?.code,
-      resolution: info?.resolution,
-      requestId: info?.request_id ?? requestId,
+      code: asNonEmptyString(info?.code),
+      resolution: asNonEmptyString(info?.resolution),
+      requestId: asNonEmptyString(info?.request_id) ?? requestId,
       detail,
       body,
     });
@@ -66,4 +66,8 @@ export class BrainAPIError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

@@ -42,7 +42,28 @@ describe("HTTP auth and headers", () => {
     await client.brains.create({ brain_id: "new-brain" });
     await client.meta.loginInfo();
 
+    expect(calls).toHaveLength(4);
+    expect(calls.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
+      ["GET", "/health"],
+      ["GET", "/system/brains-list"],
+      ["POST", "/system/brains"],
+      ["GET", "/meta/login-info"],
+    ]);
     expect(calls.every((call) => call.headers["x-brain-id"] === undefined)).toBe(true);
+  });
+
+  it("deletes a caller-supplied X-Brain-ID on exempt routes", async () => {
+    const { fetchImpl, calls } = createMockFetch(() => jsonResponse({ status: "ok" }));
+    await createClient(fetchImpl).health({
+      headers: { "X-Brain-ID": "alpha" },
+    });
+    expect(calls[0]?.headers["x-brain-id"]).toBeUndefined();
+  });
+
+  it("rejects redirects so BrainPAT is not forwarded", async () => {
+    const { fetchImpl, calls } = createMockFetch(() => jsonResponse({ status: "ok" }));
+    await createClient(fetchImpl).health();
+    expect(calls[0]?.redirect).toBe("error");
   });
 
   it("allows a per-call X-Brain-ID override", async () => {
@@ -92,6 +113,27 @@ describe("HTTP auth and headers", () => {
       });
     const client = createClient(fetchImpl, { timeoutMs: 20 });
     await expect(client.health()).rejects.toMatchObject({
+      name: "BrainAPIError",
+      code: "REQUEST_ABORTED",
+    });
+  });
+
+  it("classifies a caller abort reason as REQUEST_ABORTED", async () => {
+    const reason = new Error("cancelled");
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      if (init?.signal?.aborted) {
+        throw init.signal.reason;
+      }
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+          once: true,
+        });
+      });
+    };
+    const controller = new AbortController();
+    const pending = createClient(fetchImpl).health({ signal: controller.signal });
+    controller.abort(reason);
+    await expect(pending).rejects.toMatchObject({
       name: "BrainAPIError",
       code: "REQUEST_ABORTED",
     });
